@@ -5,7 +5,7 @@ let domain;
 let me = null;
 let space;
 
-const PREF_COLUMNS = 'notify_events, remind_before, notify_deadlines, notify_todo, notify_shopping, notify_films';
+const PREF_COLUMNS = 'notify_events, remind_before, notify_deadlines, notify_todo, notify_shopping, notify_films, notify_responses';
 
 export async function init(config) {
   const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm');
@@ -28,6 +28,7 @@ const toPrefs = (p) => ({
   todo: p.notify_todo,
   shopping: p.notify_shopping,
   films: p.notify_films,
+  responses: p.notify_responses,
 });
 
 async function loadProfile(id) {
@@ -71,6 +72,7 @@ export async function savePrefs(prefs) {
     notify_todo: prefs.todo,
     notify_shopping: prefs.shopping,
     notify_films: prefs.films,
+    notify_responses: prefs.responses,
   }).eq('id', me.id));
   me.prefs = { ...prefs };
 }
@@ -105,6 +107,17 @@ export async function saveEvent(ev) {
 
 export async function deleteEvent(id) {
   check(await sb.from('events').delete().eq('id', id));
+}
+
+export async function listResponses(eventIds) {
+  if (!eventIds.length) return [];
+  const rows = check(await sb.from('responses').select('event_id, user_id, status, note').in('event_id', eventIds));
+  return rows.map((r) => ({ eventId: r.event_id, userId: r.user_id, status: r.status, note: r.note }));
+}
+
+// Your own answer only; the database refuses anyone else's.
+export async function setResponse(eventId, status, note) {
+  check(await sb.from('responses').upsert({ event_id: eventId, user_id: me.id, status, note }));
 }
 
 export async function listLists() {
@@ -191,6 +204,7 @@ export async function hasPushSubscription(endpoint) {
 export function subscribe(onChange) {
   sb.channel('rimmens')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'responses' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'lists' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, onChange)
     .subscribe();

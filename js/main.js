@@ -20,6 +20,7 @@ const state = {
   user: null,
   profiles: [],
   events: [],
+  responses: new Map(),
   lists: [],
   items: [],
   page: 'calendar',
@@ -106,7 +107,11 @@ async function refresh() {
     backend.listLists(),
     backend.listItems(),
   ]);
-  Object.assign(state, { profiles, events, lists, items });
+  const responses = new Map();
+  for (const r of await backend.listResponses(events.map((e) => e.id))) {
+    responses.set(r.eventId, [...(responses.get(r.eventId) ?? []), r]);
+  }
+  Object.assign(state, { profiles, events, responses, lists, items });
   if (state.filmFilter !== 'all' && !profiles.some((p) => p.id === state.filmFilter)) state.filmFilter = 'all';
   render();
 }
@@ -116,11 +121,16 @@ let pending = null;
 function refreshSoon() {
   if (!state.user) return;
   clearTimeout(pending);
-  pending = setTimeout(() => run(refresh), 250);
+  // Never redraw under someone typing a note to their answer; try again once they are done.
+  pending = setTimeout(() => (document.activeElement?.classList.contains('note') ? refreshSoon() : run(refresh)), 250);
 }
 
 const handlers = {
   onEditEvent: (ev) => openEventDialog(ev),
+  onAnswer: (eventId, status, note) => run(async () => {
+    await backend.setResponse(eventId, status, note.slice(0, 120));
+    await refresh();
+  }),
   onDeleteEvent: (id) => run(async () => {
     await backend.deleteEvent(id);
     await refresh();
@@ -313,6 +323,7 @@ function openSettings() {
   f.todo.checked = prefs.todo;
   f.shopping.checked = prefs.shopping;
   f.films.checked = prefs.films;
+  f.responses.checked = prefs.responses;
   $('pref-events-label').textContent = 'Nye aftaler fra de andre';
   $('prefs-error').hidden = true;
   $('settings-dialog').showModal();
@@ -329,6 +340,7 @@ $('prefs-form').addEventListener('change', async () => {
     todo: f.todo.checked,
     shopping: f.shopping.checked,
     films: f.films.checked,
+    responses: f.responses.checked,
   };
   $('prefs-error').hidden = true;
   try {

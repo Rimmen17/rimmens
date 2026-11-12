@@ -7,7 +7,7 @@ const KEY = 'rimmens-demo';
 const PASSWORD = 'demo123';
 const USERS = ['Anders', 'Christian', 'Joan', 'Michaella', 'Nicolai', 'Sisse']
   .map((name) => ({ id: `u-${name.toLowerCase()}`, name }));
-const DEFAULT_PREFS = { events: true, remindBefore: '1d', deadlines: true, todo: true, shopping: false, films: false };
+const DEFAULT_PREFS = { events: true, remindBefore: '1d', deadlines: true, todo: true, shopping: false, films: false, responses: true };
 
 function seed() {
   const at = (days, hour) => {
@@ -120,6 +120,20 @@ export async function deleteEvent(id) {
   const db = load();
   current(db);
   db.events = db.events.filter((e) => e.id !== id);
+  db.responses = (db.responses ?? []).filter((r) => r.eventId !== id);
+  save(db);
+}
+
+export async function listResponses(eventIds) {
+  return (load().responses ?? []).filter((r) => eventIds.includes(r.eventId));
+}
+
+// Same rule as the database: each person writes only their own answer.
+export async function setResponse(eventId, status, note) {
+  const db = load();
+  const user = current(db);
+  const others = (db.responses ?? []).filter((r) => !(r.eventId === eventId && r.userId === user.id));
+  db.responses = others.concat({ eventId, userId: user.id, status, note });
   save(db);
 }
 

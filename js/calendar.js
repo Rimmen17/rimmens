@@ -1,6 +1,7 @@
 import { el } from './dom.js';
 import * as dates from './dates.js';
 import { EVERYONE, personName, personTone } from './people.js';
+import { answerBlock } from './answers.js';
 
 const WEEKDAYS = ['man', 'tir', 'ons', 'tor', 'fre', 'lør', 'søn'];
 
@@ -35,6 +36,7 @@ function eventCard(ev, state, h) {
         el('span', { class: `chip ${personTone(state, ev.who)}`, text: personName(state, ev.who) })),
       el('p', { class: 'when' }, el('span', { class: 'sr', text: `${dates.formatDay(ev.startsAt)}, ` }), where),
       ev.description && el('p', { class: 'desc', text: ev.description }),
+      answerBlock(ev, state, h),
       el('div', { class: 'foot' },
         creator && el('span', { class: 'creator', text: `Oprettet af ${creator}` }),
         el('span', { class: 'edit-row' },

@@ -1,5 +1,6 @@
-// Sends the phone notifications for Kririm and Krarim, which share this Supabase project.
+// Sends the phone notifications for Krarim, Kririm and The Rimmens, which share this Supabase project.
 // Each person chooses what they get (columns notify_* and remind_before on profiles):
+// - an answer (Kommer, Bliver forsinket, Kommer ikke) on an event they made (sent at once)
 // - a new event made by the partner (sent at once, the database calls on each new event)
 // - a reminder 1 hour or 1 day before an event, or none
 // - deadlines: at 8:00 on the day a task is due
@@ -30,8 +31,9 @@ const KINDS: Record<string, { pref: string; label: string }> = {
 type Profile = {
   id: string; name: string; space: string;
   notify_events: boolean; remind_before: string; notify_deadlines: boolean;
-  notify_todo: boolean; notify_shopping: boolean; notify_films: boolean;
+  notify_todo: boolean; notify_shopping: boolean; notify_films: boolean; notify_responses: boolean;
 };
+const VERB: Record<string, string> = { joining: 'kommer', late: 'bliver forsinket', not_joining: 'kommer ikke' };
 type Payload = { title: string; body: string; tag: string };
 
 const when = (iso: string, allDay: boolean) =>
@@ -62,7 +64,7 @@ Deno.serve(async () => {
 
   const now = Date.now();
   const iso = (t: number) => new Date(t).toISOString();
-  const result = { events: 0, reminders: 0, deadlines: 0, items: 0, sent: 0, removed: 0, failed: 0 };
+  const result = { events: 0, reminders: 0, deadlines: 0, items: 0, answers: 0, sent: 0, removed: 0, failed: 0 };
 
   try {
     const subs = await db.from('push_subscriptions').select('endpoint, user_id, p256dh, auth');
@@ -71,7 +73,7 @@ Deno.serve(async () => {
     if (!subs.data.length) return json(result);
 
     const profiles = await db.from('profiles')
-      .select('id, name, space, notify_events, remind_before, notify_deadlines, notify_todo, notify_shopping, notify_films');
+      .select('id, name, space, notify_events, remind_before, notify_deadlines, notify_todo, notify_shopping, notify_films, notify_responses');
     if (profiles.error) throw profiles.error;
     const people = profiles.data as Profile[];
     const byId = new Map(people.map((p) => [p.id, p]));
@@ -159,6 +161,25 @@ Deno.serve(async () => {
       }
     }
 
+    // Answers on events, to the event's creator only, never their own. Every change of an
+    // answer is its own notification; the tag lets the phone replace the earlier one.
+    const answers = await db.from('responses')
+      .select('event_id, user_id, status, note, updated_at, events!inner(title, created_by, space)')
+      .gt('updated_at', iso(now - HOUR));
+    if (answers.error) throw answers.error;
+    for (const a of answers.data) {
+      // deno-lint-ignore no-explicit-any
+      const ev = (a as any).events as { title: string; created_by: string | null; space: string };
+      const creator = ev.created_by ? byId.get(ev.created_by) : undefined;
+      if (!creator || creator.id === a.user_id || creator.space !== ev.space) continue;
+      if (!withDevice.has(creator.id) || !creator.notify_responses) continue;
+      outbox.push({ key: `answer:${a.event_id}:${a.user_id}:${a.updated_at}`, user: creator.id, payload: {
+        title: `${byId.get(a.user_id)?.name ?? 'Nogen'} ${VERB[a.status] ?? 'har svaret'}`,
+        body: `${ev.title}${a.note ? `: "${a.note}"` : ''}`,
+        tag: `answer:${a.event_id}:${a.user_id}`,
+      } });
+    }
+
     if (!outbox.length) return json(result);
 
     // Claim: only keys that were not there already come back, and only those are sent.
@@ -175,6 +196,7 @@ Deno.serve(async () => {
       if (kind === 'event') result.events += 1;
       if (kind === 'remind') result.reminders += 1;
       if (kind === 'due') result.deadlines += 1;
+      if (kind === 'answer') result.answers += 1;
       for (const sub of subs.data) {
         if (sub.user_id !== o.user) continue;
         jobs.push(webpush.sendNotification(
