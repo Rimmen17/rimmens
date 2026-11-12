@@ -149,6 +149,7 @@ input, textarea, select {
 .demo { margin: 0 0 16px; padding: 10px 14px; border: 1px dashed var(--line); border-radius: 14px; background: var(--card); font-size: 0.9rem; }
 
 /* Header */
+.back { display: inline-flex; align-items: center; min-height: 32px; margin-bottom: 4px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--card-solid); color: var(--link); font-size: 0.85rem; font-weight: 600; text-decoration: none; }
 .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .who { display: flex; align-items: center; gap: 6px; padding: 0 6px 0 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--card-solid); color: var(--muted); white-space: nowrap; font-size: 0.9rem; }
 .top .logo { text-shadow: 0 0 6px var(--card-solid), 0 0 2px var(--card-solid); }
